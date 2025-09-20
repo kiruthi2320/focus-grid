@@ -4,30 +4,46 @@ const PORT = process.env.PORT || 3000;
 
 const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 
+app.use((req, res, next) => {
+  // Set CORS globally
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  next();
+});
+
 app.get('/', (req, res) => {
   res.send('Image Proxy Server is running');
 });
 
 app.get('/proxy/:identifier', async (req, res) => {
   const { identifier } = req.params;
-  const iaImageUrl = `https://archive.org/services/img/${identifier}`;
+  const url = `https://archive.org/services/img/${identifier}`;
 
   try {
-    const response = await fetch(iaImageUrl);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000); // 10 seconds timeout
+
+    const response = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeout);
 
     if (!response.ok) {
       return res.status(404).send('Image not found');
     }
 
     const contentType = response.headers.get('content-type');
-    res.set('Access-Control-Allow-Origin', '*');
     res.set('Content-Type', contentType);
 
-    response.body.pipe(res);
+    response.body.pipe(res).on('error', err => {
+      console.error('Stream error:', err);
+      res.status(500).send('Stream error');
+    });
 
   } catch (err) {
-    console.error('Proxy error:', err);
-    res.status(500).send('Server error');
+    if (err.name === 'AbortError') {
+      res.status(504).send('Request timeout');
+    } else {
+      console.error('Proxy error:', err);
+      res.status(500).send('Server error');
+    }
   }
 });
 
