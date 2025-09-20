@@ -1,14 +1,13 @@
 const express = require('express');
-const fetch = require('node-fetch');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Root route to confirm server is running
+const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
+
 app.get('/', (req, res) => {
   res.send('Image Proxy Server is running');
 });
 
-// Proxy route to fetch and serve archive.org images by identifier
 app.get('/proxy/:identifier', async (req, res) => {
   const { identifier } = req.params;
   const iaImageUrl = `https://archive.org/services/img/${identifier}`;
