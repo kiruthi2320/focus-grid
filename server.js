@@ -3,7 +3,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 
-// CORS middleware handling preflight properly
+// Global CORS middleware with OPTIONS preflight
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -16,27 +16,36 @@ app.use((req, res, next) => {
 });
 
 app.get('/', (req, res) => {
-  res.send('Image Proxy Server is running');
+  res.send('Proxy server for Internet Archive images and videos');
 });
 
-app.get('/proxy/:identifier', async (req, res) => {
-  const { identifier } = req.params;
-  const url = `https://archive.org/services/img/${identifier}`;
-
+// Proxy route supporting full file paths (images or videos)
+app.get('/proxy/*', async (req, res) => {
   try {
+    const archivePath = req.params[0];
+    const isImage = !archivePath.includes('/');
+    const baseUrl = isImage 
+      ? 'https://archive.org/services/img/'
+      : 'https://archive.org/download/';
+    
+    // Append the unencoded full path to baseUrl
+    const url = baseUrl + archivePath;
+
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000); // 10 seconds timeout
+    const timeout = setTimeout(() => controller.abort(), 15000);
     const response = await fetch(url, { signal: controller.signal });
     clearTimeout(timeout);
 
     if (!response.ok) {
-      return res.status(response.status).send('Image not found or blocked');
+      res.status(response.status).send('File not found or blocked');
+      return;
     }
 
+    // Forward content-type header
     const contentType = response.headers.get('content-type');
     res.set('Content-Type', contentType);
-    console.log(`Proxying ${url} with status ${response.status} and content-type ${contentType}`);
 
+    // Stream response body to client
     response.body.pipe(res).on('error', err => {
       console.error('Stream error:', err);
       res.status(500).send('Stream error');
@@ -52,5 +61,5 @@ app.get('/proxy/:identifier', async (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Image proxy server listening on port ${PORT}`);
+  console.log(`Proxy server listening on port ${PORT}`);
 });
