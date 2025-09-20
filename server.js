@@ -3,7 +3,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 
-// Global CORS middleware including OPTIONS preflight handler
+// Global CORS middleware including OPTIONS preflight handling
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -19,10 +19,10 @@ app.get('/', (req, res) => {
   res.send('Proxy server for Internet Archive images and videos');
 });
 
-// Proxy route with named wildcard parameter supporting full file paths
-app.get('/proxy/:path(*)', async (req, res) => {
+// Proxy route using wildcard with req.params[0]
+app.get('/proxy/*', async (req, res) => {
   try {
-    const archivePath = req.params.path;
+    const archivePath = req.params[0]; // Gets full path after /proxy/
     const isImage = !archivePath.includes('/');
     const baseUrl = isImage 
       ? 'https://archive.org/services/img/'
