@@ -3,7 +3,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 
-// Global CORS middleware including OPTIONS preflight handling
+// Global CORS middleware handling OPTIONS preflight
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -19,16 +19,44 @@ app.get('/', (req, res) => {
   res.send('Proxy server for Internet Archive images and videos');
 });
 
-// Proxy route using wildcard with req.params[0]
-app.get('/proxy/*', async (req, res) => {
+// Route for single identifier (images)
+app.get('/proxy/:identifier', async (req, res) => {
   try {
-    const archivePath = req.params[0]; // Gets full path after /proxy/
-    const isImage = !archivePath.includes('/');
-    const baseUrl = isImage 
-      ? 'https://archive.org/services/img/'
-      : 'https://archive.org/download/';
-    
-    const url = baseUrl + archivePath;
+    const { identifier } = req.params;
+    const url = `https://archive.org/services/img/${identifier}`;
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    const response = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      res.status(response.status).send('Image not found or blocked');
+      return;
+    }
+
+    const contentType = response.headers.get('content-type');
+    res.set('Content-Type', contentType);
+
+    response.body.pipe(res).on('error', err => {
+      console.error('Stream error:', err);
+      res.status(500).send('Stream error');
+    });
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      res.status(504).send('Request timeout');
+    } else {
+      console.error('Proxy error:', err);
+      res.status(500).send('Server error');
+    }
+  }
+});
+
+// Route for video or multiple segment file paths (only supports one segment folder + file)
+app.get('/proxy/:folder/:filename', async (req, res) => {
+  try {
+    const { folder, filename } = req.params;
+    const url = `https://archive.org/download/${folder}/${filename}`;
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15000);
@@ -47,7 +75,6 @@ app.get('/proxy/*', async (req, res) => {
       console.error('Stream error:', err);
       res.status(500).send('Stream error');
     });
-
   } catch (err) {
     if (err.name === 'AbortError') {
       res.status(504).send('Request timeout');
