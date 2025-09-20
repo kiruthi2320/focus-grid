@@ -3,7 +3,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 
-// Global CORS middleware with OPTIONS preflight
+// Global CORS middleware including OPTIONS preflight handler
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -19,16 +19,15 @@ app.get('/', (req, res) => {
   res.send('Proxy server for Internet Archive images and videos');
 });
 
-// Proxy route supporting full file paths (images or videos)
-app.get('/proxy/*', async (req, res) => {
+// Proxy route with named wildcard parameter supporting full file paths
+app.get('/proxy/:path(*)', async (req, res) => {
   try {
-    const archivePath = req.params[0];
+    const archivePath = req.params.path;
     const isImage = !archivePath.includes('/');
     const baseUrl = isImage 
       ? 'https://archive.org/services/img/'
       : 'https://archive.org/download/';
     
-    // Append the unencoded full path to baseUrl
     const url = baseUrl + archivePath;
 
     const controller = new AbortController();
@@ -41,15 +40,14 @@ app.get('/proxy/*', async (req, res) => {
       return;
     }
 
-    // Forward content-type header
     const contentType = response.headers.get('content-type');
     res.set('Content-Type', contentType);
 
-    // Stream response body to client
     response.body.pipe(res).on('error', err => {
       console.error('Stream error:', err);
       res.status(500).send('Stream error');
     });
+
   } catch (err) {
     if (err.name === 'AbortError') {
       res.status(504).send('Request timeout');
